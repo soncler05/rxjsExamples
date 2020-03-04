@@ -1,41 +1,181 @@
-import {add} from './helpers';
-import { from, pipe, of, interval, throwError } from 'rxjs';
-import { fromFetch } from 'rxjs/fetch';
-import { switchMap, concatMap, delay, take, retry, catchError } from 'rxjs/operators';
-import { ajax } from 'rxjs/ajax';
-import { axisBottom } from 'd3';
+import * as d3 from "d3";
+import { Subject, interval, animationFrameScheduler } from "rxjs";
+import {take } from "rxjs/operators";
+import { animationFrame } from "rxjs/internal/scheduler/animationFrame";
+
+const waveData = new Subject();
+
+
+const audioCtx = new AudioContext();
+const audioElement = document.getElementById('audioElement');
+
+//Canvas setup
+const canvas = document.querySelector('canvas');
+const canvasCtx = canvas.getContext('2d');
+const width = canvas.width;
+const height = canvas.height;
 
 
 
+//Web Audio API setup
+const audioSource = audioCtx.createMediaElementSource(audioElement);
+const analyser = audioCtx.createAnalyser();
 
-function checkStatus(){
-    return switchMap(
-        response => {
-            return (response.status === 400) ? throwError() : of('Looks Good')
-        }
-    )
+analyser.fftSize = 1024;
+const bufferLength = analyser.frequencyBinCount;
+
+audioCtx.resume().then(() =>{
+    console.log('Playback resumed successfully!!!');
+});
+
+audioSource.connect(analyser);
+audioSource.connect(audioCtx.destination);
+
+const dataArray = new Uint8Array(bufferLength);
+analyser.getByteTimeDomainData(dataArray);
+
+
+//D3 Setup
+const x = d3.scaleLinear().
+domain([0, analyser.frequencyBinCount]).
+range([0, width]);
+
+const y = d3.scaleLinear().
+domain([-175, 175]).
+range([height, 175]);
+
+const line = d3.line().
+x(function(d, i) {return x(i);}).
+y(function(d) {return y(d);}).
+context(canvasCtx);
+
+
+function renderFullLine(d){
+    canvasCtx.strokeStyle = "rgb(255, 0,  100)";
+    canvasCtx.beginPath();
+    line(d);
+    canvasCtx.stroke();
+} 
+
+function renderLoop(){
+    analyser.getByteTimeDomainData(dataArray);
+    canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+    waveData.next(dataArray);
 }
 
-
-const users = fromFetch("https://httpbin.org/status/400");
-
-users.
-pipe(
-    checkStatus(),
-    catchError(x => throwError('400 Error'))
-)
-.subscribe(
-  (x) => add.li(x),
-  (err) => console.log(err),
+waveData.subscribe(
+    d => {
+        return renderFullLine(d);
+    }
 )
 
 
+const loop = interval(0, animationFrameScheduler).pipe(
+    take(2000)
+).subscribe(renderLoop);
 
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+//#region 
+// import {add} from './helpers';
+// import { from, pipe, of, interval, throwError, Observable, Subject } from 'rxjs';
+// import { fromFetch } from 'rxjs/fetch';
+// import { switchMap, concatMap, delay, take, retry, catchError } from 'rxjs/operators';
+// import { ajax } from 'rxjs/ajax';
+// import { axisBottom } from 'd3';
+
+
+// //--------------------Hot || Multicast
+
+// const obs = new Subject();
+
+// obs.subscribe((x) => add.li(`S: ${x}`));
+
+// setTimeout(() => obs.subscribe((x) => add.li(`S: ${x}`), 4005));
+
+// setTimeout(() => {obs.subscribe((x) => add.li(`S1: ${x}`))}, 4000);
+
+
+// obs.subscribe((x) => add.li(`S: ${x}`));
+
+// obs.next(new Date());
+
+
+
+// setTimeout(() => obs.next(new Date()), 4060);
+
+
+
+// //--------------------Cold || Unicast
+
+// const obs = new Observable(
+//     (sub) => sub.next(new Date())
+// )
+
+
+// obs.subscribe( add.li);
+
+// setTimeout(() => obs.subscribe( add.li), 2000);
+
+
+// obs.subscribe( add.li);
+
+
+
+
+
+//#endregion
+
+
+
+
+
+
+
+
+
+
+
+
+
+//#region HTTP
+
+//------------------Handle Error
+
+// function checkStatus(){
+//     return switchMap(
+//         response => {
+//             return (response.status === 400) ? throwError() : of('Looks Good')
+//         }
+//     )
+// }
+
+
+// const users = fromFetch("https://httpbin.org/status/400");
+
+// users.
+// pipe(
+//     checkStatus(),
+//     catchError(x => throwError('400 Error'))
+// )
+// .subscribe(
+//   (x) => add.li(x),
+//   (err) => console.log(err),
+// )
 
 
 
@@ -98,20 +238,7 @@ pipe(
 //     }
 // )
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+//#endregion
 
 //#region Maps
 
